@@ -17,12 +17,14 @@ const RoomPage = () => {
 
   const [myStream, setMyStream] = useState(null);
   // const [remoteStream, setRemoteStream] = useState(null);
+  const [remoteemailid, setReomteEmailid] = useState(null);
 
   const handelNewUserJoined = useCallback(
     async (data) => {
       // console.log("User joined room", emailId);
       const { emailId } = data;
       const offer = await createOffer();
+      setReomteEmailid(emailId);
 
       socket.emit("call-user", {
         emailId,
@@ -37,6 +39,7 @@ const RoomPage = () => {
       console.log("Incoming call", data);
       const { from, offer } = data;
       const ans = await createAnswer(offer);
+      setReomteEmailid(from);
       socket.emit("call-accepted", { emailId: from, ans });
     },
     [socket, createAnswer]
@@ -47,10 +50,10 @@ const RoomPage = () => {
       console.log("Call accepted", data);
       const { ans } = data;
       await setRemoteAnswer(ans);
-      await sendStream(myStream);
+
       console.log("Remote answer set", ans);
     },
-    [socket, createAnswer]
+    [setRemoteAnswer]
   );
 
   useEffect(() => {
@@ -73,6 +76,35 @@ const RoomPage = () => {
 
     setMyStream(stream);
   }, []);
+
+  const handleTrackEvent = useCallback(
+    (event) => {
+      const stream = event.streams[0];
+      console.log("Remote stream", stream);
+      // setRemoteStream(stream);
+      remoteStream(stream);
+    },
+    [remoteStream]
+  );
+
+  const handleNegotiationNeeded = useCallback(async () => {
+    // const offer = await peer.createOffer();
+    const localOffer = peer.localDescription;
+    // await peer.setLocalDescription(offer);
+    socket.emit("call-user", {
+      emailId: remoteemailid,
+      localOffer,
+    });
+  }, []);
+
+  useEffect(() => {
+    peer.addEventListener("negotiationneeded", handleNegotiationNeeded);
+
+    return () => {
+      peer.removeEventListener("negotiationneeded", handleNegotiationNeeded);
+    };
+  }, [peer, handleNegotiationNeeded]);
+
   useEffect(() => {
     getUserMediaStream();
   }, [getUserMediaStream]);
@@ -80,8 +112,26 @@ const RoomPage = () => {
   return (
     <div>
       room page
-      <ReactPlayer stream={myStream} playing={true} muted={true} />
-      <ReactPlayer stream={remoteStream} playing={true} muted={true} />
+      <button onClick={() => sendStream(myStream)}>Send Video</button>
+      {console.log("myStream", myStream)}
+      {myStream && (
+        <ReactPlayer
+          url={myStream}
+          playing={true}
+          muted={true}
+          width="100%"
+          height="auto"
+        />
+      )}
+      {remoteStream && (
+        <video
+          ref={(video) => {
+            if (video && remoteStream) video.srcObject = remoteStream;
+          }}
+          autoPlay
+          style={{ width: "400px", border: "1px solid #ccc" }}
+        />
+      )}
     </div>
   );
 };
